@@ -1,0 +1,114 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 1. Primitives & Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+
+    function isValidDish(data) {
+      return data.keys().hasAll(['name', 'price', 'category', 'type']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.price is number && data.price > 0 &&
+             data.category is string &&
+             data.type in ['veg', 'non-veg'] &&
+             (!data.keys().hasAny(['description']) || (data.description is string && data.description.size() <= 500)) &&
+             (!data.keys().hasAny(['rating']) || (data.rating is number && data.rating >= 0 && data.rating <= 5)) &&
+             (!data.keys().hasAny(['image']) || (data.image is string && data.image.size() <= 1000)) &&
+             (!data.keys().hasAny(['isBestseller']) || data.isBestseller is bool);
+    }
+
+    function isValidCombo(data) {
+      return data.keys().hasAll(['title', 'price', 'type']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 100 &&
+             data.price is number && data.price > 0 &&
+             data.type in ['family', 'lunch', 'spice'] &&
+             (!data.keys().hasAny(['subtitle']) || (data.subtitle is string && data.subtitle.size() <= 200)) &&
+             (!data.keys().hasAny(['image']) || (data.image is string && data.image.size() <= 1000));
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['userId', 'items', 'totalAmount', 'status', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.items is list && data.items.size() > 0 && data.items.size() <= 50 &&
+             data.totalAmount is number && data.totalAmount >= 0 &&
+             data.status in ['pending', 'preparing', 'delivered', 'cancelled'] &&
+             data.createdAt == request.time &&
+             (!data.keys().hasAny(['updatedAt']) || data.updatedAt == request.time);
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['displayName', 'email']) &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100 &&
+             data.email == request.auth.token.email &&
+             request.auth.token.email_verified == true &&
+             (!data.keys().hasAny(['photoURL']) || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
+             (!data.keys().hasAny(['address']) || (data.address is string && data.address.size() <= 300));
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'lokeshnani8001@gmail.com' && request.auth.token.email_verified == true
+      );
+    }
+
+    // --- Collection Routes ---
+
+    match /dishes/{dishId} {
+      allow get: if isValidId(dishId);
+      allow list: if true; // Public menu
+      allow write: if isAdmin() && isValidDish(incoming());
+    }
+
+    match /combos/{comboId} {
+      allow get: if isValidId(comboId);
+      allow list: if true; // Public combos
+      allow write: if isAdmin() && isValidCombo(incoming());
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow create: if isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming());
+      allow update: if isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming()) &&
+                       incoming().email == existing().email; // Email is immutable
+    }
+
+    match /orders/{orderId} {
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isValidId(orderId) && isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isValidId(orderId) && isSignedIn() && isValidOrder(incoming());
+      allow update: if isValidId(orderId) && isSignedIn() && existing().userId == request.auth.uid &&
+                       isValidOrder(incoming()) &&
+                       incoming().userId == existing().userId && // Identity integrity
+                       incoming().createdAt == existing().createdAt && // Immortality
+                       (
+                         // Action: Cancel
+                         (existing().status == 'pending' && incoming().status == 'cancelled' && 
+                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']))
+                       );
+    }
+  }
+}

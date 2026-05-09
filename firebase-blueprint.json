@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "Dish": {
+      "title": "Dish",
+      "description": "A food item in the menu",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "rating": { "type": "number" },
+        "image": { "type": "string" },
+        "category": { "type": "string" },
+        "type": { "type": "string", "enum": ["veg", "non-veg"] },
+        "isBestseller": { "type": "boolean" }
+      },
+      "required": ["name", "price", "category", "type"]
+    },
+    "Combo": {
+      "title": "Combo",
+      "description": "A value meal combo",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "price": { "type": "number" },
+        "image": { "type": "string" },
+        "type": { "type": "string", "enum": ["family", "lunch", "spice"] }
+      },
+      "required": ["title", "price", "type"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "An order placed by a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "preparing", "delivered", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "items", "totalAmount", "status", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account information",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["displayName", "email"]
+    }
+  },
+  "firestore": {
+    "/dishes/{dishId}": {
+      "schema": "Dish",
+      "description": "Collection of all menu items"
+    },
+    "/combos/{comboId}": {
+      "schema": "Combo",
+      "description": "Collection of value meal combos"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "User orders"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles"
+    }
+  }
+}
